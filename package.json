@@ -1,0 +1,23 @@
+{
+  "name": "js2py",
+  "version": "1.0.0",
+  "description": "",
+  "main": "compile.js",
+  "bin": "compile.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "build:win": "pkg . --targets node18-win-x64 --out-path dist"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "devDependencies": {
+    "@types/node": "^24.10.1"
+  },
+  "pkg": {
+    "targets": [
+      "node18-win-x64"
+    ]
+  }
+}
