@@ -4,3 +4,7 @@ while(test < 9){
     test += 1;
 }
 console.log(test);
+function add(a, b){
+    return a + b;
+}
+console.log(add(test, 4))
