@@ -79,6 +79,11 @@ async function main() {
                     .replace(/;$/, "");
                 python += indent + converted + "\n";
             }
+            //處理3元運算
+            else if(line.includes("?") && line.includes(":")){
+                let linearr:string[] = line.split(/\?|:/);
+                python += (indent + linearr[1] + " " + "if" + " " + linearr[0] + " " + "else" + " " + linearr[2]);
+            }
             // 處理函式定義
             else if (trimmedLine.startsWith("function ")) {
                 const converted = trimmedLine
