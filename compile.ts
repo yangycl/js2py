@@ -1,135 +1,208 @@
-import { execSync } from "child_process";
+import * as fs from 'fs';
+import * as path from 'path';
+import * as readline from 'readline';
+import { execSync } from 'child_process';
 
-const readline = require('readline');
-const fs = require('fs');
-const path = require('path');
-const child_process = require("child_process");
-
+// 建立讀取介面
 const rl = readline.createInterface({
     input: process.stdin,
     output: process.stdout
 });
 
-// 將 rl.question 包裝成 Promise
-function askQuestion(query: string): Promise<string> {
-    return new Promise((resolve) => {
-        rl.question(query, (answer: string) => {
-            resolve(answer);
-        });
+// Promise 化 question 函數
+function question(query: string): Promise<string> {
+    return new Promise(resolve => {
+        rl.question(query, resolve);
     });
 }
 
-function lookYAndN(ans:string, pyPath:string):string{
-    if(ans == "y"){
-        try {
-            const pyitPath = execSync("where pyinstaller",{ encoding : "utf8"}).split("\n")[0];
-            const exePath = pyPath.replace(/\.py$/, ".exe");
-            child_process.execSync(`${pyitPath} --onefile --clean --name ${exePath.split("\\")[exePath.split("\\").length - 1]} ${pyPath}`, { stdio: "inherit" });
-            return "為你準備exe...";
-        } catch (error) {
-            return `Error! ${error}`
-        }
-    }else if(ans == "n"){
-        return "";
-    }else{
+function convertVariableDeclaration(line: string): string {
+    // 移除 const, let, var 並處理賦值
+    return line.replace(/\b(const|let|var)\s+/g, '');
+}
+
+function convertConsoleLog(line: string): string {
+    // 將 console.log 轉換為 print
+    return line.replace(/console\.log\((.*)\)/g, 'print($1)');
+}
+
+function convertBoolean(line: string): string {
+    // 轉換布林值
+    return line.replace(/\btrue\b/g, 'True').replace(/\bfalse\b/g, 'False');
+}
+
+function lookYAndN(ans: string, pyPath: string): string {
+    if (ans === "y" || ans === "Y") {
+        return pyPath;
+    } else if (ans === "n" || ans === "N") {
+        return "取消覆寫";
+    } else {
         return "請輸入y/n";
     }
 }
 
-// 改成 async 函式
-async function main() {
-    const inputPath = await askQuestion("please input file path: ");
-    
-    try {
-        const filePath = path.isAbsolute(inputPath) ? inputPath : path.join(process.cwd(), inputPath);
-        const js = fs.readFileSync(filePath, 'utf8');
-        const jsArray = js.split(/\r?\n/);
-        let python = "";
+// PyInstaller 功能
+async function runPyInstaller(pyPath: string): Promise<void> {
+    let cond: boolean = true;
+    while (cond) {
+        const message = await question("要用 pyinstaller 編譯成 exe 嗎 (y/n): ");
         
-        for (const jsline of jsArray) {
-            const line = jsline;
-            const trimmedLine = line.trim();
-            
-            // 空行
-            if (trimmedLine.length === 0) {
-                python += "\n";
-                continue;
-            }
-            
-            // 跳過右大括號
-            if (trimmedLine === "}") {
-                continue;
-            }
-            
-            // 複製原始縮排
-            const indentMatch = line.match(/^\s*/);
-            const indent = indentMatch ? indentMatch[0] : "";
-            
-            // 處理變數宣告
-            if (trimmedLine.startsWith("const ") || trimmedLine.startsWith("var ") || trimmedLine.startsWith("let ")) {
-                const converted = trimmedLine
-                    .replace(/^(const|var|let)\s+/, "")
-                    .replace(/;$/, "");
-                python += indent + converted + "\n";
-            }
-            // 處理 console.log
-            else if (trimmedLine.startsWith("console.log")) {
-                const converted = trimmedLine
-                    .replace("console.log", "print")
-                    .replace(/;$/, "");
-                python += indent + converted + "\n";
-            }
-            //處理3元運算
-            else if(line.includes("?") && line.includes(":")){
-                let linearr:string[] = line.split(/\?|:/);
-                python += (indent + linearr[1] + " " + "if" + " " + linearr[0] + " " + "else" + " " + linearr[2]);
-            }
-            // 處理函式定義
-            else if (trimmedLine.startsWith("function ")) {
-                const converted = trimmedLine
-                    .replace("function", "def")
-                    .replace(/{/g, ":")
-                    .replace(/;$/, "");
-                python += indent + converted + "\n";
-            }
-            // 處理其他行
-            else {
-                let converted = trimmedLine
-                    .replace(/\btrue\b/g, "True")
-                    .replace(/\bfalse\b/g, "False")
-                    .replace(/(\w+)\+\+/g, "$1 += 1")
-                    .replace(/(\w+)--/g, "$1 -= 1")
-                    .replace(/{/g, ":")
-                    .replace(/}/g, "")
-                    .replace(/;$/, "");
+        if (message === "y" || message === "Y") {
+            try {
+                const pyitPath = execSync("where pyinstaller", { encoding: "utf8" }).split("\n")[0];
+                const exePath = pyPath.replace(/\.py$/, ".exe");
+                const exeName = exePath.split("\\")[exePath.split("\\").length - 1];
                 
-                python += indent + converted + "\n";
-            }
-        }
-        
-        console.log(python);
-        
-        const outputPath = filePath.replace(/\.js$/, ".py");
-        fs.writeFileSync(outputPath, python, "utf8");
-        console.log(`\n✓ 已儲存到: ${outputPath}`);
-        
-        let cond:boolean = true;
-        while(cond){    
-            const message = await askQuestion("要用pyinstaller編譯成exe嗎 (y/n)");
-            const result = lookYAndN(message, outputPath);
-            console.log(result);
-            if(result !== "請輸入y/n"){
+                console.log("為你準備 exe...");
+                execSync(`${pyitPath} --onefile --clean --name ${exeName} ${pyPath}`, { stdio: "inherit" });
+                console.log("✅ 編譯完成！");
+                cond = false;
+            } catch (error) {
+                console.error(`Error! ${error}`);
                 cond = false;
             }
+        } else if (message === "n" || message === "N") {
+            console.log("取消編譯");
+            cond = false;
+        } else {
+            console.log("請輸入 y/n");
         }
-    } catch (err: any) {
-        if (err instanceof Error) {
-            console.error("Error:", err.message);
-        }
-    } finally {
-        rl.close();
     }
 }
 
-// 執行主程式
+// 三元運算子函數（已修正）
+function _3(indent: string, code: string): string {
+    let linearr: string[] = code.split(/\?|:/);
+    return indent + linearr[1].trim() + " if " + linearr[0].trim() + " else " + linearr[2].trim();
+}
+
+// 改成 async 函式
+async function main() {
+    const args = process.argv.slice(2);
+
+    if (args.length === 0) {
+        console.log("使用方法: node compile.js <input.js> [output.py]");
+        rl.close();
+        return;
+    }
+
+    const inputFile = args[0];
+    const outputFile = args[1] || inputFile.replace(/\.js$/, '.py');
+
+    if (!fs.existsSync(inputFile)) {
+        console.error(`錯誤: 找不到檔案 ${inputFile}`);
+        rl.close();
+        return;
+    }
+
+    // 如果輸出檔案已存在，詢問是否覆寫
+    if (fs.existsSync(outputFile)) {
+        const ans = await question(`${outputFile} 已存在，是否覆寫？(y/n): `);
+        const result = lookYAndN(ans, outputFile);
+        
+        if (result === "取消覆寫") {
+            console.log("取消覆寫");
+            rl.close();
+            return;
+        } else if (result === "請輸入y/n") {
+            console.log("請輸入y/n");
+            rl.close();
+            return;
+        }
+    }
+
+    const jsCode = fs.readFileSync(inputFile, 'utf-8');
+    const lines = jsCode.split('\n');
+    let python = '';
+    let indentLevel = 0;
+
+    for (let line of lines) {
+        const trimmedLine = line.trim();
+        
+        // 跳過空行和註解
+        if (!trimmedLine || trimmedLine.startsWith('//')) {
+            if (trimmedLine.startsWith('//')) {
+                python += line.replace('//', '#') + '\n';
+            } else {
+                python += '\n';
+            }
+            continue;
+        }
+
+        // 處理縮排
+        const indent = '    '.repeat(indentLevel);
+
+        // 處理右大括號（減少縮排）
+        if (trimmedLine === '}') {
+            indentLevel = Math.max(0, indentLevel - 1);
+            continue;
+        }
+
+        // 處理變數宣告
+        if (trimmedLine.match(/^(const|let|var)\s+/)) {
+            let converted = convertVariableDeclaration(line);
+            converted = convertConsoleLog(converted);
+            converted = convertBoolean(converted);
+            
+            // 移除分號
+            converted = converted.replace(/;$/, '');
+            
+            python += indent + converted.trim() + "\n";
+        }
+        // 處理三元運算 (已修正)
+        else if (/\w+\s*\?\s*\w+\s*:\s*\w+/.test(line)) {
+            python += _3(indent, trimmedLine) + "\n";
+        }
+        // 處理空值合併運算子 (已修正)
+        else if (/\?\?/.test(line)) {
+            let parts = line.split("??");
+            let variable = parts[0].trim();
+            let defaultValue = parts[1].trim();
+            let line_3 = defaultValue + " if " + variable + " is None else " + variable;
+            python += indent + line_3 + "\n";
+        }
+        // 處理函式定義
+        else if (trimmedLine.startsWith("function ")) {
+            const match = trimmedLine.match(/function\s+(\w+)\s*\((.*?)\)\s*\{?/);
+            if (match) {
+                const funcName = match[1];
+                const params = match[2];
+                python += indent + `def ${funcName}(${params}):\n`;
+                indentLevel++;
+            }
+        }
+        // 處理 return
+        else if (trimmedLine.startsWith("return ")) {
+            let converted = trimmedLine.replace(/return\s+/, 'return ');
+            converted = converted.replace(/;$/, '');
+            python += indent + converted + "\n";
+        }
+        // 處理 console.log
+        else if (trimmedLine.includes("console.log")) {
+            let converted = convertConsoleLog(trimmedLine);
+            converted = convertBoolean(converted);
+            converted = converted.replace(/;$/, '');
+            python += indent + converted + "\n";
+        }
+        // 處理左大括號（增加縮排）
+        else if (trimmedLine === '{') {
+            indentLevel++;
+        }
+        // 其他行
+        else {
+            let converted = line.replace(/;$/, '');
+            converted = convertBoolean(converted);
+            python += indent + converted.trim() + "\n";
+        }
+    }
+
+    fs.writeFileSync(outputFile, python);
+    console.log(`✅ 轉換完成: ${inputFile} -> ${outputFile}`);
+
+    // PyInstaller 功能（保留你的原始功能）
+    await runPyInstaller(outputFile);
+
+    rl.close();
+}
+
 main();
